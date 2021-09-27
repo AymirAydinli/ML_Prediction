@@ -1,0 +1,511 @@
+---
+title: "Machine Learning Regresion and Prediction"
+author: "Aymir Aydinli"
+output:
+  html_document: default
+  pdf_document: default
+---
+```{r setup, include=FALSE}
+
+```
+
+## R Markdown
+
+## Required Packages
+
+### Introduction
+
+To draw inference about whether factors like gender of the student, the race/ethnicity of the student, the level of education of their parents, the type of lunch they ate and whether the completition of test preparation course has any impact on the scores obtained by the student in the tests.
+
+Some of the questions that this analysis will try to answer are:
+
+Does the gender of student plays a role in how they perform in various courses.
+Does the educational background of the parents impact the students performance.
+Does the ethnicity of the student has an impact on their performance.
+Is completing the Test Preparation course help the students in performing better.
+Does the quality of lunch the students consume leaves an impact on how they perform.
+Finally, a model will be trained to predict how the students will perform given the factors influencing their performance and will also evaluate the performance of the model.
+
+
+```{r}
+#install.packages('kableExtra')
+#install.packages('randomForest')
+#install.packages('caret')
+#install.packages("party")
+
+
+library(party)
+library(xtable)
+library(RColorBrewer)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(e1071)
+library(randomForest)
+library(caret)
+library(corrplot)
+```
+
+
+Importing the dataset
+```{r include=FALSE}
+data <- read.csv("StudentsPerformance.csv")
+
+#Understanding the data.
+
+str(data)
+```
+
+The data has eight variables and 1000 observations. 
+The key variables include gender, race/ethnicity, parental level of education,lunch, 
+Test preparation course, math score, reading score and writing score.
+
+
+
+#Exploratory data analysis
+
+#1.Students By gender:
+There are more 518 female students and 482 male students.
+
+```{r}
+plot1<-ggplot() + geom_bar(data = data, aes(x = data$gender), width = 0.2, fill = "green") +
+  geom_text(stat='count', data = data, aes(x = data$gender, label=..count..), vjust=-0.2) +
+  theme_bw() + xlab("Gender") + ylab("Number of Students") + theme_classic() + ggtitle("Number of Students by Gender") + scale_fill_brewer(type = "qual", palette = 1, direction = 1,aesthetics = "fill") + ylim(0,600)
+
+
+
+plot1
+```
+
+
+#2. Students By race:
+There are 319 students in group C,
+262 students in group D while there are only 89 students in group A.
+
+
+```{r}
+plot2 <- ggplot() +
+  geom_bar(data = data, aes(x = data$race.ethnicity), width = 0.6, fill = "green") +
+  geom_text(data = data, aes(x = data$race.ethnicity, label = ..count..), stat = "count", vjust = -0.2) +
+  theme_bw() +
+  xlab("Race/Ethnicity") +
+  ylab("Number of Students") +
+  theme(
+    text = element_text(family = "Tahoma")
+  ) +
+  theme_classic()+
+  scale_fill_brewer(type = "qual", palette = 1, direction = 1,
+                    aesthetics = "fill") +
+  ggtitle("Number of Students by Race/Ethnicity")
+
+
+plot2
+
+```
+
+#3.Distribution of scores
+152 students scored between 65 - 70 marks in maths. 
+154 students scored in the same bracket in writing. 148 students scored between 70 - 75 marks in reading.
+
+
+
+```{r}
+data_gather <- data %>%
+  mutate(StudentID = row_number()) %>%
+  gather(key = "subject", value = "score", math.score:writing.score)
+
+
+data_gather %>%
+  ggplot(aes(x = score)) +
+  geom_histogram(bins = 20, colour = "green", fill = "white")  +
+  facet_grid(subject ~.) +
+  theme_bw() +
+  theme_classic() +
+  scale_x_continuous(limits = c(0,100), breaks = seq(0, 100, 10)) +
+  stat_bin(bins= 20, geom="text", aes(label=..count..) , 
+           vjust = -1) +
+  ylim(0, 200)
+```
+
+
+#Preparation courses
+#1.Completion:
+Majority of students do not complete preparation courses. 
+Proportion of students completing preparation course is highest in group E.
+
+
+```{r}
+plot3 <- ggplot() +
+  geom_bar(data = data, aes(x = data$test.preparation.course), width = 0.6, fill = "green") +
+  geom_text(data = data, aes(x = data$test.preparation.course, label = ..count..), stat = "count", vjust = -0.2) +
+  facet_grid(. ~race.ethnicity) +
+  theme_bw() +
+  xlab("Preparation course") +
+  ylab("Number of Students") +
+  theme(
+    text = element_text(family = "Tahoma") ) + 
+  theme_classic() +
+  ggtitle("Number of Students who completed Preparation course by Race/Ethnicity") +
+  scale_fill_brewer(type = "qual", palette = 1, direction = 1,
+                    aesthetics = "fill")
+
+plot3
+```
+
+
+# 2. Impact of course: 
+As we see the that the average of the scores of students
+who completed preparation course is higher than the average of scores of the students
+who did not complete the course.
+
+
+```{r}
+plot4 <- ggplot(data=data_gather, aes(x=data_gather$test.preparation.course, y=data_gather$score, 
+                                      fill=data_gather$test.preparation.course)) + 
+  geom_boxplot() +
+  stat_summary(fun.y=mean, colour="darkred", geom="point", 
+               shape=18, size=3,show_guide = FALSE) +
+  theme_bw() +
+  theme_classic() +
+  xlab("Preparation Course") +
+  ylab("Average Score") +
+  theme(
+    text = element_text(family = "Tahoma"),
+    legend.title = element_blank()) +
+  scale_fill_brewer(type = "qual", palette = 1, direction = 1,
+                    aesthetics = "fill")
+
+plot4
+```
+
+# Scores by race/ethnicity
+
+```{r}
+plot5 <- ggplot(data=data_gather, aes(x=data_gather$race.ethnicity, y=data_gather$score, 
+                                      fill=data_gather$race.ethnicity)) + 
+  geom_boxplot() + 
+  theme(
+    text = element_text(family = "Tahoma"),
+    axis.text.x = element_blank(),
+    legend.title = element_blank()
+  ) +
+  
+  stat_summary(fun.y=mean, colour="darkred", geom="point", 
+               shape=18, size=3,show_guide = FALSE) +
+  facet_grid(. ~ subject ) +
+  theme_bw() +
+  theme_classic() +
+  scale_fill_brewer(type = "qual", palette = 1, direction = 1,
+                    aesthetics = "fill") +
+  xlab("Race/ethnicity") +
+  ylab("Score")
+
+plot5
+
+```
+
+Average scores are highest in the group E.
+
+
+
+# Scores By gender
+
+```{r}
+plot6 <- ggplot(data=data_gather, aes(x=data_gather$gender, y=data_gather$score, 
+                                      fill=data_gather$gender)) + 
+  geom_boxplot() +
+  stat_summary(fun.y=mean, colour="darkred", geom="point", 
+               shape=18, size=3,show_guide = FALSE) +
+  facet_grid(. ~ subject ) +
+  theme_bw() +
+  theme_classic() +
+  theme(legend.title = element_blank()) +
+  xlab("Gender") +
+  ylab("Score") +
+  scale_fill_brewer(type = "qual", palette = 1, direction = 1,
+                    aesthetics = "fill")
+
+plot6
+```
+
+
+Female students have high average scores in reading and writing, 
+while male students fare better in maths.
+
+
+#Prediction Model
+
+In this section we are going to build a linear regression model, 
+predicting Math scores.
+Math scores- dependent variable (Y), Writing_Score, Gender, Race, Lunch, Parent_Education, 
+Test_Prep - independent variables (X). First, we will split our dataset into training and testing datasets.
+Then, we will run lm() function with "training" data, predict() function on "testing" data, 
+and create a visualization of our regression model with regression line and 95% confidence intervals. 
+
+```{r}
+#randIndex <- sample(1:dim(data)[1])
+# In order to split data, create a 2/3 cutpoint and round the number
+#cutpoint2_3 <- floor(2*dim(data)[1]/3)
+
+set.seed(101)
+index <- createDataPartition(data$math.score, p=0.70, list=FALSE)
+trainData <- data[index, ]
+testData <- data[-index, ]
+train_control <- trainControl(method="cv", number=10)
+```
+
+```{r}
+#trainData <- trainData[ , !(names(train) %in% 'age_range')]
+
+trainData$gender <- ifelse(trainData$gender == "male", 1, 0)
+trainData$test.preparation.course <- ifelse(trainData$test.preparation.course == "completed", 1, 0)
+trainData$lunch <- ifelse(trainData$lunch == "standard", 1, 0)
+
+testData$gender <- ifelse(testData$gender == "male", 1, 0)
+testData$test.preparation.course <- ifelse(testData$test.preparation.course == "completed", 1, 0)
+testData$lunch <- ifelse(testData$lunch == "standard", 1, 0)
+
+testData
+
+#insurance_test$region <- as.integer(insurance_test$region)
+
+num.cols<-sapply(trainData,is.numeric)
+```
+
+
+```{r}
+#For the correlation we need only the numeric variables so we select them with supply.
+loan_numeric_var <- sapply(trainData, is.numeric) %>% which() %>% names()
+loan_numeric_var
+
+
+#Correlation of the variables
+loans_corr <-
+  cor(trainData[, loan_numeric_var],
+      use = "pairwise.complete.obs")
+
+loans_corr
+
+#ploting the correlation to make it easier to understand the correlation between variables
+corrplot(loans_corr, 
+         method = "number", type = "lower", order = "hclust")
+
+```
+
+# these are potential candidates
+# to be excluded from the model
+findCorrelation(loans_corr, names = TRUE, cutoff = 0.75)
+
+
+
+
+
+
+
+
+
+#Lm Model
+
+```{r echo=TRUE}
+model <- lm(math.score ~ writing.score + gender + race.ethnicity + lunch + parental.level.of.education + test.preparation.course,data=trainData)
+  summary(model)
+  lmPred <- predict(model,testData,interval = "prediction", level=0.95)
+ 
+```
+
+
+```{r}
+summary(lmPred)
+```
+
+
+# 1. Bind predictions and testData 
+```{r}
+  data1 <- cbind(testData, lmPred)
+  head(data1)
+```
+
+
+
+# 2. Visualise prediction intervals
+```{r}
+  p <- ggplot(data1, aes( fit, math.score)) +
+    geom_point() +
+    stat_smooth(method = lm)
+
+ 
+  p + geom_line(aes(y = lwr), color = "red", linetype = "dashed")+
+    geom_line(aes(y = upr), color = "red", linetype = "dashed") +
+    xlab("Predicted Scores") + ylab("Test Scores")  
+```
+
+
+
+
+# Linear Regression Summary:
+  
+Adjusted R Squared = 0.87 -> 87% of variation in Math scores can be explained by
+independent variables in our model. R Squared value indicated that we created a good prediction model.
+F-Statistics produces P-value of near zero -> indicates significance of our equation.
+Visualization at 95% confidence and prediction intervals.  
+
+
+
+
+
+#-----------------------------------------------------------------------------------------------------------
+
+#  Prediction 2
+We created a simple prediction model, 
+to see if we predict whether the student had a test preparation course
+or not based on all other variables.
+  
+# Random Forest Model
+```{r}
+#model1 <- randomForest(math.course ~ ., data = trainData, importance = TRUE, ntree = 1000, mtry = 6) ##change the target variable
+#model1
+
+model1 <- randomForest(x=trainData[,-6], y=trainData$math.score, maxnodes = 10, ntree = 10,trControl=train_control,  method = 'ranger')
+
+print(model1)
+
+importance(model1)
+
+varImpPlot(model1)
+
+
+PredTest <-predict(model1, testData[,-6] ) # predict(model1, testData, type = "") ##check this 
+
+result_rf <- testData
+result_rf['prediction']<-PredTest
+head(result_rf)
+model1
+```
+
+```{r}
+ggplot(  ) + 
+  geom_point( aes(x = testData$reading.score, y = testData$math.score, color = 'red', alpha = 0.5) ) + 
+  geom_point( aes(x = testData$reading.score , y = PredTest, color = 'blue',  alpha = 0.5)) + 
+  labs(x = "Carat", y = "charges", color = "", alpha = 'Transperency') +
+  scale_color_manual(labels = c( "Predicted", "Real"), values = c("blue", "red")) 
+
+```
+
+
+The main statistical results below will help us to decide which model is good.
+
+```{r echo=FALSE}
+print(paste0('MSE: ' ,caret::postResample(PredTest, testData$math.score)['RMSE']^2 ))
+print(paste0('RMSE: ' ,caret::postResample(PredTest, testData$math.score)['RMSE']))
+print(paste0('R2: ' ,caret::postResample(PredTest, testData$math.score)['Rsquared'] ))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+## Decision Tree Model
+
+
+```{r}
+#install.packages("rpart")
+#install.packages("rpart.plot")
+library(rpart)
+library(rpart.plot)
+library(rattle)
+```
+
+Our decision tree model
+```{r echo=TRUE}
+dec_model <- rpart(math.score ~.,method="anova", data = trainData)
+
+rpart.plot(dec_model)
+
+
+
+```
+
+
+```{r}
+dec_pred <- predict(dec_model, testData[,-6], method="anova")
+summary(dec_pred)
+glimpse(data)
+dec_tree.sse = sum((dec_pred - testData$math.score)^2)
+```
+
+
+```{r include=FALSE}
+mean((dec_pred - testData$math.score)^2)
+```
+
+
+Table for actual and predicted values of decison tree model
+```{r echo=FALSE}
+result <- testData
+result['dt_predicton']<- dec_pred
+head(result)
+
+```
+
+
+
+
+
+MSE, RMSE, R-squared
+```{r echo=FALSE}
+print(paste0('MSE: ' ,caret::postResample(dec_pred , testData$math.score)['RMSE']^2 ))
+print(paste0('RMSE: ' ,caret::postResample(dec_pred , testData$math.score)['RMSE'] ))
+print(paste0('R2: ' ,caret::postResample(dec_pred, testData$math.score)['Rsquared'] ))
+```
+
+
+## Summary
+
+The below table shows the model and main parametrs and comparing all the prediction with real values.
+
+
+```{r echo=FALSE}
+summary_table <- matrix(c(0.773516118083984, 59.4606300204585, 7.71107191124934, 0.761806720389451, 57.8448311040032, 7.60557894601083 ), ncol = 3, byrow = TRUE)
+colnames(summary_table) <- c("R-squared", "MSE", "RMSE")
+rownames(summary_table) <- c("Random Forest Model","Tree Decision Model")
+summary_table
+```
+
+
+```{r echo=FALSE}
+prediction_table <- cbind(testData$math.score, PredTest, dec_pred)
+colnames(prediction_table) <- c("Real Values","Random Forest P.", "Decision Tree P.")
+head(prediction_table)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
